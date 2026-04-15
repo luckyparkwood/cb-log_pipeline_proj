@@ -46,6 +46,42 @@ def get_recent_alerts(limit=10):
 
         return cursor.fetchall()
 
+def get_pipeline_health():
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT recorded_at, queue_depth, processing_lag_ms, logs_processed
+            FROM pipeline_metrics
+            ORDER BY id DESC
+            LIMIT 1
+        """)
+        latest = cursor.fetchone()
+
+        cursor.execute("""
+            SELECT AVG(processing_lag_ms)
+            FROM pipeline_metrics
+            ORDER BY id DESC
+            LIMIT 20
+        """)
+        avg_lag_row = cursor.fetchone()
+
+    avg_lag = avg_lag_row[0] if avg_lag_row and avg_lag_row[0] is not None else 0
+    return latest, avg_lag
+
+def get_processing_rate(window_seconds=60):
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=window_seconds)).isoformat()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM pipeline_metrics
+            WHERE recorded_at >= ?
+        """, (cutoff,))
+        count = cursor.fetchone()[0]
+
+    return count / window_seconds
 
 def main():
     print("\n=== Pipeline Report ===\n")
@@ -53,6 +89,20 @@ def main():
     total_logs, total_alerts = get_totals()
     print(f"Total logs: {total_logs}")
     print(f"Total alerts: {total_alerts}")
+
+    latest_metric, avg_lag = get_pipeline_health()
+    processing_rate = get_processing_rate()
+
+    print("\n--- Pipeline Health ---")
+    if latest_metric:
+        recorded_at, queue_depth, processing_lag_ms, logs_processed = latest_metric
+        print(f"Latest queue depth: {queue_depth}")
+        print(f"Latest processing lag: {processing_lag_ms:.2f} ms")
+        print(f"Logs processed by worker: {logs_processed}")
+        print(f"Average processing lag (recent): {avg_lag:.2f} ms")
+        print(f"Approx processing rate: {processing_rate:.2f} logs/sec")
+    else:
+        print("No pipeline metrics recorded yet.")
 
     print("\n--- Recent Service Stats (last 60s) ---")
     stats = get_recent_service_stats()

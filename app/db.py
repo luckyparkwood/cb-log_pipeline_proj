@@ -8,7 +8,6 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # logs table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,7 +21,6 @@ def init_db():
     )
     """)
 
-    # alerts table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS alerts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,11 +33,20 @@ def init_db():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS pipeline_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recorded_at TEXT,
+        queue_depth INTEGER,
+        processing_lag_ms REAL,
+        logs_processed INTEGER
+    )
+    """)
+
     conn.commit()
     conn.close()
 
 
-#connection helper
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_NAME)

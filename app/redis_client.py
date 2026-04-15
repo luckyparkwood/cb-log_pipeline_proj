@@ -14,3 +14,6 @@ def push_log(event: dict):
 
 def pop_log():
     return client.brpop(QUEUE_NAME, timeout=0)
+
+def get_queue_depth():
+    return client.llen(QUEUE_NAME)
