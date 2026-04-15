@@ -15,10 +15,10 @@ def make_log():
 
     latency = random.randint(50, 250)
 
-    if service == "billing-service" and random.random() < 0.2:
-        latency = random.randint(600, 1200)
+    if service == "billing-service" and random.random() < 0.3:
+        latency = random.randint(700, 1200)
 
-    if service == "auth-service" and random.random() < 0.2:
+    if service == "auth-service" and random.random() < 0.3:
         level = "ERROR"
 
     return {
