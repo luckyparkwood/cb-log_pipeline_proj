@@ -3,9 +3,9 @@ Overview
 
 This project is a lightweight log processing pipeline that simulates a simplified observability system.
 
-It ingests log events through an API, buffers them in a queue, processes them asynchronously, stores them for analysis, and generates alerts based on recent behavior. A log generator produces continuous traffic, and a CLI report provides real-time visibility into system health.
+It ingests log events through an API, buffers them in a queue, processes them asynchronously, stores them for analysis, and generates alerts based on recent behavior. A log generator produces continuous traffic, and a CLI report provides real-time visibility into both system health and pipeline performance.
 
-The goal was to model production-style patterns such as decoupled ingestion, asynchronous processing, time-windowed aggregation, and rule-based alerting.
+The goal was to model production-style patterns such as decoupled ingestion, asynchronous processing, time-windowed aggregation, rule-based alerting, and pipeline self-observability.
 
 ---
 
@@ -20,7 +20,8 @@ At a high level, the system:
 - stores logs and alerts in SQLite
 - computes metrics over recent time windows (e.g., last 60 seconds)
 - triggers alerts when thresholds are exceeded (error rate, latency)
-- provides a CLI report showing current system state
+- tracks pipeline health (queue depth, processing lag, throughput)
+- provides a CLI report showing current system state and pipeline performance
 
 ---
 
@@ -29,6 +30,10 @@ Architecture
 Data flows through the system as follows:
 
 Generator → API → Redis → Worker → SQLite → Rules → Alerts → Report
+
+In addition, the worker continuously records pipeline health metrics:
+
+Worker → pipeline_metrics (SQLite) → Report
 
 Each component has a single responsibility and communicates through well-defined boundaries.
 
@@ -62,6 +67,7 @@ Queue (app/redis_client.py)
 - Uses Redis lists for buffering
 - Producers push logs (LPUSH)
 - Worker consumes logs (BRPOP)
+- Exposes queue depth (LLEN)
 
 Purpose:  
 Decouples ingestion from processing, allowing the system to absorb bursts of traffic without blocking the API.
@@ -74,9 +80,16 @@ Worker (app/worker.py)
 - Persists logs to SQLite
 - Evaluates alerting rules
 - Stores triggered alerts
+- Records pipeline metrics for each processed event
+
+Metrics recorded:
+
+- queue depth
+- processing lag (event time vs processing time)
+- total logs processed
 
 Purpose:  
-Performs asynchronous processing and isolates downstream work from the ingestion layer.
+Performs asynchronous processing and isolates downstream work from the ingestion layer, while also instrumenting the pipeline itself.
 
 ---
 
@@ -84,10 +97,16 @@ Database (app/db.py)
 
 - Initializes SQLite schema
 - Provides a connection helper
-- Stores logs and alerts
+- Stores logs, alerts, and pipeline metrics
+
+Tables:
+
+- logs
+- alerts
+- pipeline_metrics
 
 Purpose:  
-Provides persistent storage and enables aggregation queries for alerting and reporting.
+Provides persistent storage and enables aggregation queries for alerting, reporting, and pipeline monitoring.
 
 ---
 
@@ -126,10 +145,18 @@ Reporting CLI (app/report.py)
     - total logs and alerts
     - per-service metrics (last 60 seconds)
     - recent alerts
-- Can run continuously to provide a live view
+    - pipeline health metrics
+
+Pipeline health includes:
+
+- current queue depth
+- latest processing lag
+- average processing lag (recent samples)
+- logs processed by worker
+- approximate processing rate (logs/sec)
 
 Purpose:  
-Gives visibility into system behavior and makes it easy to observe alerts and trends in real time.
+Provides real-time visibility into both system behavior and pipeline performance, making it easy to observe trends, detect bottlenecks, and validate system health.
 
 ---
 
@@ -139,10 +166,11 @@ Key design ideas
 - Asynchronous processing: worker consumes logs independently of ingestion
 - Time-windowed aggregation: metrics computed over recent data
 - Rule-based alerting: simple thresholds trigger alerts
+- Pipeline self-observability: the system tracks its own performance metrics
 - Separation of concerns: each component has a focused responsibility
 
 ---
 
 Summary
 
-This project demonstrates how to build a small-scale observability pipeline using production-style patterns. It shows how logs can be ingested, processed asynchronously, analyzed in near real time, and surfaced as actionable alerts.
+This project demonstrates how to build a small-scale observability pipeline using production-style patterns. It shows how logs can be ingested, processed asynchronously, analyzed in near real time, surfaced as actionable alerts, and monitored through pipeline-level metrics such as queue depth, processing lag, and throughput.
